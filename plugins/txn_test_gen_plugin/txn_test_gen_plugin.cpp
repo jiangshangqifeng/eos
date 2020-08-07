@@ -238,10 +238,10 @@ struct txn_test_gen_plugin_impl {
 		 fc::crypto::private_key txn_test_receiver_C_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(64, 'c')));
 
 		 for(unsigned int i = 0; i < total_accounts; ++i) {
-		 	 char c = '0' + (i%16);
-		     fc::crypto::private_key txn_test_receiver_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(std::string(size_t(i+1), c)));
+		     fc::crypto::private_key txn_test_receiver_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(accounts[i].to_string()));
 			 fc::crypto::public_key  txn_text_receiver_pub_key = txn_test_receiver_priv_key.get_public_key();
 
+			//ilog("create_test_accounts name=${n},pri=${pri},pub=${pub}", ("n", accounts[i].to_string())("pri",txn_test_receiver_priv_key.to_string())("pub",txn_text_receiver_pub_key.to_string()));
 			 //create some accounts
 			{
 			 	signed_transaction trx;
@@ -384,18 +384,24 @@ struct txn_test_gen_plugin_impl {
          block_id_type reference_block_id = cc.get_block_id_for_num(reference_block_num);
 
 		uint64_t seed = nonce;
-         for(unsigned int i = 0; i < batch; ++i) {
+        for(unsigned int i = 0; i < batch; ++i) {
 		 	
          uint16_t nonce_index = uint16_t(seed % total_accounts)+i;
          uint16_t a_index = nonce_index >= total_accounts?(nonce_index-total_accounts):nonce_index;
-         uint16_t b_index = a_index+batch >= total_accounts?(a_index+batch-total_accounts):(a_index+batch);		 
-         static fc::crypto::private_key a_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(a_index+1, char(a_index%128))));
-         static fc::crypto::private_key b_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(b_index+1, char(b_index%128))));
+         uint16_t b_index = (a_index+batch) >= total_accounts?(a_index+batch-total_accounts):(a_index+batch);
+		 if(b_index == a_index) {
+		 	b_index = a_index + uint16_t(total_accounts/2);
+		 }
 		 
+         fc::crypto::private_key a_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(accounts[a_index].to_string()));
+         fc::crypto::private_key b_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(accounts[b_index].to_string()));
+		 
+		 //ilog("send_transaction a.name=${n},a.pri=${pri},a.pub=${pub}", ("n", accounts[a_index].to_string())("pri",a_priv_key.to_string())("pub",a_priv_key.get_public_key().to_string()));
+		 //ilog("send_transaction b.name=${n},b.pri=${pri},b.pub=${pub}", ("n", accounts[b_index].to_string())("pri",b_priv_key.to_string())("pub",b_priv_key.get_public_key().to_string()));
+		 
+		 {
+		 //create the actions here
 	     action act_a_to_b;
-	     action act_b_to_a;
-		 
-		 //create the actions here		 
 		 act_a_to_b.account = newaccountT;
 		 act_a_to_b.name = N(transfer);
 		 act_a_to_b.authorization = vector<permission_level>{{accounts[a_index],config::active_name}};
@@ -404,14 +410,6 @@ struct txn_test_gen_plugin_impl {
 						 fc::mutable_variant_object()("from",accounts[a_index].to_string())("to",accounts[b_index].to_string())("l", tx_salt))),
 						 abi_serializer::create_yield_function( abi_serializer_max_time ));
 		 
-		 act_b_to_a.account = newaccountT;
-		 act_b_to_a.name = N(transfer);
-		 act_b_to_a.authorization = vector<permission_level>{{accounts[b_index],config::active_name}};
-		 act_b_to_a.data = eosio_token_serializer.variant_to_binary("transfer",
-						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"1.0000 LAT\",\"memo\":\"${l}\"}",
-						 fc::mutable_variant_object()("from",accounts[b_index].to_string())("to",accounts[a_index].to_string())("l", tx_salt))),
-						 abi_serializer::create_yield_function( abi_serializer_max_time ));
-		{
          signed_transaction trx;
          trx.actions.push_back(act_a_to_b);
          trx.context_free_actions.emplace_back(action({}, config::null_account_name, name("nonce"), fc::raw::pack( std::to_string(nonce_prefix)+std::to_string(nonce++) )));
@@ -424,6 +422,15 @@ struct txn_test_gen_plugin_impl {
          }
 
          {
+	     action act_b_to_a;
+		 act_b_to_a.account = newaccountT;
+		 act_b_to_a.name = N(transfer);
+		 act_b_to_a.authorization = vector<permission_level>{{accounts[b_index],config::active_name}};
+		 act_b_to_a.data = eosio_token_serializer.variant_to_binary("transfer",
+						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"1.0000 LAT\",\"memo\":\"${l}\"}",
+						 fc::mutable_variant_object()("from",accounts[b_index].to_string())("to",accounts[a_index].to_string())("l", tx_salt))),
+						 abi_serializer::create_yield_function( abi_serializer_max_time ));
+		 
          signed_transaction trx;
          trx.actions.push_back(act_b_to_a);
          trx.context_free_actions.emplace_back(action({}, config::null_account_name, name("nonce"), fc::raw::pack( std::to_string(nonce_prefix)+std::to_string(nonce++) )));
