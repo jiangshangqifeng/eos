@@ -241,7 +241,6 @@ struct txn_test_gen_plugin_impl {
 		     fc::crypto::private_key txn_test_receiver_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(accounts[i].to_string()));
 			 fc::crypto::public_key  txn_text_receiver_pub_key = txn_test_receiver_priv_key.get_public_key();
 
-			//ilog("create_test_accounts name=${n},pri=${pri},pub=${pub}", ("n", accounts[i].to_string())("pri",txn_test_receiver_priv_key.to_string())("pub",txn_text_receiver_pub_key.to_string()));
 			 //create some accounts
 			{
 			 	signed_transaction trx;
@@ -291,10 +290,6 @@ struct txn_test_gen_plugin_impl {
                                    fc::mutable_variant_object()("from",newaccountT.to_string())("to",accounts[i].to_string()))),
                                    abi_serializer::create_yield_function( abi_serializer_max_time ));
 				trx.actions.push_back(act);
-				
-				 if(0==i) {
-					ilog("022 act.data OK, accounts[i].to_string()=${name}", ("name", accounts[i].to_string()));
-				 }
 	            trx.expiration = cc.head_block_time() + fc::seconds(180);
 	            trx.set_reference_block(cc.head_block_id());
 	            trx.max_net_usage_words = 5000;
@@ -395,10 +390,7 @@ struct txn_test_gen_plugin_impl {
 		 
          fc::crypto::private_key a_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(accounts[a_index].to_string()));
          fc::crypto::private_key b_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(accounts[b_index].to_string()));
-		 
-		 //ilog("send_transaction a.name=${n},a.pri=${pri},a.pub=${pub}", ("n", accounts[a_index].to_string())("pri",a_priv_key.to_string())("pub",a_priv_key.get_public_key().to_string()));
-		 //ilog("send_transaction b.name=${n},b.pri=${pri},b.pub=${pub}", ("n", accounts[b_index].to_string())("pri",b_priv_key.to_string())("pub",b_priv_key.get_public_key().to_string()));
-		 
+
 		 {
 		 //create the actions here
 	     action act_a_to_b;
