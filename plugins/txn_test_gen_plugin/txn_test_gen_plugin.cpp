@@ -300,7 +300,7 @@ struct txn_test_gen_plugin_impl {
       push_transactions(std::move(trxs), next);
    }
 
-   string start_generation(const std::string& salt, const uint64_t& period, const uint64_t& batch_size) {
+   string start_generation(const std::string& salt, const uint64_t& period, const std::string& quantity, const uint64_t& batch_size) {
       ilog("Starting transaction test plugin");
       if(running)
          return "start_generation already running";
@@ -319,6 +319,7 @@ struct txn_test_gen_plugin_impl {
       nonce_prefix = 0;
 
 	  tx_salt = salt;
+	  tx_quantity = quantity;
       thread_pool.emplace( "txntest", thread_pool_size );
       timer = std::make_shared<boost::asio::high_resolution_timer>(thread_pool->get_executor());
 
@@ -393,8 +394,8 @@ struct txn_test_gen_plugin_impl {
 		 act_a_to_b.name = N(transfer);
 		 act_a_to_b.authorization = vector<permission_level>{{accounts[a_index],config::active_name}};
 		 act_a_to_b.data = eosio_token_serializer.variant_to_binary("transfer",
-						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"1.0000 LAT\",\"memo\":\"${l}\"}",
-						 fc::mutable_variant_object()("from",accounts[a_index].to_string())("to",accounts[b_index].to_string())("l", tx_salt))),
+						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"${quantity} LAT\",\"memo\":\"${l}\"}",
+						 fc::mutable_variant_object()("from",accounts[a_index].to_string())("to",accounts[b_index].to_string())("quantity", tx_quantity)("l", tx_salt))),
 						 abi_serializer::create_yield_function( abi_serializer_max_time ));
 		 
          signed_transaction trx;
@@ -457,6 +458,7 @@ struct txn_test_gen_plugin_impl {
    std::string tx_salt;
    unsigned batch;
    uint64_t nonce_prefix;
+   std::string tx_quantity;
 
    int32_t txn_reference_block_lag;
 };
@@ -519,7 +521,7 @@ void txn_test_gen_plugin::plugin_startup() {
       CALL_ASYNC(txn_test_gen, my, create_test_accounts, INVOKE_ASYNC_R_R(my, create_test_accounts, std::string, std::string), 200),
       CALL_ASYNC(txn_test_gen, my, init_test_accounts, INVOKE_ASYNC_R_R(my, init_test_accounts, std::string, std::string), 200),
       CALL(txn_test_gen, my, stop_generation, INVOKE_V_V(my, stop_generation), 200),
-      CALL(txn_test_gen, my, start_generation, INVOKE_V_R_R_R(my, start_generation, std::string, uint64_t, uint64_t), 200)
+      CALL(txn_test_gen, my, start_generation, INVOKE_V_R_R_R(my, start_generation, std::string, uint64_t, std::string, uint64_t), 200)
    });
 }
 
