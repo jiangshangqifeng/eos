@@ -8,6 +8,8 @@
 #include <fc/exception/exception.hpp>
 #include <fc/reflect/variant.hpp>
 #include <fc/io/json.hpp>
+#include <fc/io/fstream.hpp>
+#include <fstream>
 
 #include <boost/asio/high_resolution_timer.hpp>
 #include <boost/algorithm/clamp.hpp>
@@ -56,6 +58,11 @@ using namespace eosio::chain;
      auto status = api_handle->call_name(vs.at(0).as<in_param0>(), vs.at(1).as<in_param1>(), vs.at(2).as<in_param2>()); \
      eosio::detail::txn_test_gen_status result = { status };
 
+#define INVOKE_V_R_R_R_R(api_handle, call_name, in_param0, in_param1, in_param2, in_param3) \
+     const auto& vs = fc::json::json::from_string(body).as<fc::variants>(); \
+     auto status = api_handle->call_name(vs.at(0).as<in_param0>(), vs.at(1).as<in_param1>(), vs.at(2).as<in_param2>(), vs.at(3).as<in_param3>()); \
+     eosio::detail::txn_test_gen_status result = { status };
+
 #define INVOKE_V_R_R(api_handle, call_name, in_param0, in_param1) \
      const auto& vs = fc::json::json::from_string(body).as<fc::variants>(); \
      api_handle->call_name(vs.at(0).as<in_param0>(), vs.at(1).as<in_param1>()); \
@@ -100,8 +107,21 @@ struct txn_test_gen_plugin_impl {
    fc::optional<eosio::chain::named_thread_pool>        thread_pool;
    std::shared_ptr<boost::asio::high_resolution_timer>  timer;
    uint16_t total_accounts;
+   uint8_t tx_type;
    std::vector<name> accounts;
    name newaccountT;
+
+   // custom tx
+   // erc20
+   name erc20Account;
+   std::string erc20Func;
+   std::string erc20ABISerializer;
+   std::string erc20Qunatity;
+   // key-value   
+   name kvAccount;
+   std::string kvFunc;
+   std::string kvABISerializer;
+   uint64_t kvParamN;
 
    void push_next_transaction(const std::shared_ptr<std::vector<signed_transaction>>& trxs, const std::function<void(const fc::exception_ptr&)>& next ) {
       chain_plugin& cp = app().get_plugin<chain_plugin>();
@@ -197,9 +217,9 @@ struct txn_test_gen_plugin_impl {
                act.name = N(issue);
                act.authorization = vector<permission_level>{{newaccountT,config::active_name}};
                act.data = eosio_token_serializer.variant_to_binary("issue",
-                                       fc::json::from_string(fc::format_string("{\"to\":\"${to}\",\"quantity\":\"600000000000.0000 LAT\",\"memo\":\"\"}",
-                                       fc::mutable_variant_object()("to",newaccountT.to_string()))),
-                                       abi_serializer::create_yield_function( abi_serializer_max_time ));
+                                   fc::json::from_string(fc::format_string("{\"to\":\"${to}\",\"quantity\":\"600000000000.0000 LAT\",\"memo\":\"\"}",
+                                   fc::mutable_variant_object()("to",newaccountT.to_string()))),
+                                   abi_serializer::create_yield_function( abi_serializer_max_time ));
                trx.actions.push_back(act);
             }
 			
@@ -271,7 +291,6 @@ struct txn_test_gen_plugin_impl {
          abi_serializer eosio_token_serializer{fc::json::from_string(contracts::eosio_token_abi().data()).as<abi_def>(),
                                                abi_serializer::create_yield_function( abi_serializer_max_time )};
 		 fc::crypto::private_key txn_test_receiver_C_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(64, 'c')));
-
 		 for(unsigned int i = 0; i < total_accounts; ++i) {
 			 //transfer LAT to test accounts
 		 	{
@@ -300,7 +319,7 @@ struct txn_test_gen_plugin_impl {
       push_transactions(std::move(trxs), next);
    }
 
-   string start_generation(const std::string& salt, const uint64_t& period, const std::string& quantity, const uint64_t& batch_size) {
+   string start_generation(const std::string& salt, const uint8_t& type, const uint64_t& period, const uint64_t& batch_size) {
       ilog("Starting transaction test plugin");
       if(running)
          return "start_generation already running";
@@ -317,9 +336,9 @@ struct txn_test_gen_plugin_impl {
       timer_timeout = period;
       batch = batch_size/2;
       nonce_prefix = 0;
-
 	  tx_salt = salt;
-	  tx_quantity = quantity;
+	  tx_type = type;
+	  
       thread_pool.emplace( "txntest", thread_pool_size );
       timer = std::make_shared<boost::asio::high_resolution_timer>(thread_pool->get_executor());
 
@@ -334,8 +353,8 @@ struct txn_test_gen_plugin_impl {
 
    void arm_timer(boost::asio::high_resolution_timer::time_point s) {
       timer->expires_at(s + std::chrono::milliseconds(timer_timeout));
-      boost::asio::post( thread_pool->get_executor(), [this]() {
-         send_transaction([this](const fc::exception_ptr& e){
+      boost::asio::post( thread_pool->get_executor(), [=]() {
+         send_tx([this](const fc::exception_ptr& e){
             if (e) {
                elog("pushing transaction failed: ${e}", ("e", e->to_detail_string()));
                if(running)
@@ -348,6 +367,33 @@ struct txn_test_gen_plugin_impl {
             return;
          arm_timer(timer->expires_at());
       });
+   }
+
+   void send_tx(std::function<void(const fc::exception_ptr&)> next, uint64_t nonce_prefix) {
+     try {	 	
+	     switch(tx_type)
+	 	 {
+	 	   case 0:
+	 	   	{
+		   	send_transaction(next, nonce_prefix);
+		    break;
+	 	   	}
+	 	   case 1:
+	 	   	{
+		   	send_erc20_tx(next, nonce_prefix);
+		    break;
+	 	   	}
+	 	   case 2:
+	 	   	{
+		   	send_kv_tx(next, nonce_prefix);
+		    break;
+	 	   	}
+		   default:
+		   	break;
+	 	 }
+     } catch ( const fc::exception& e ) {
+        next(e.dynamic_copy_exception());
+     }
    }
 
    void send_transaction(std::function<void(const fc::exception_ptr&)> next, uint64_t nonce_prefix) {
@@ -394,8 +440,8 @@ struct txn_test_gen_plugin_impl {
 		 act_a_to_b.name = N(transfer);
 		 act_a_to_b.authorization = vector<permission_level>{{accounts[a_index],config::active_name}};
 		 act_a_to_b.data = eosio_token_serializer.variant_to_binary("transfer",
-						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"${quantity} LAT\",\"memo\":\"${l}\"}",
-						 fc::mutable_variant_object()("from",accounts[a_index].to_string())("to",accounts[b_index].to_string())("quantity", tx_quantity)("l", tx_salt))),
+						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"1.0000 LAT\",\"memo\":\"${l}\"}",
+						 fc::mutable_variant_object()("from",accounts[a_index].to_string())("to",accounts[b_index].to_string())("l", tx_salt))),
 						 abi_serializer::create_yield_function( abi_serializer_max_time ));
 		 
          signed_transaction trx;
@@ -415,7 +461,7 @@ struct txn_test_gen_plugin_impl {
 		 act_b_to_a.name = N(transfer);
 		 act_b_to_a.authorization = vector<permission_level>{{accounts[b_index],config::active_name}};
 		 act_b_to_a.data = eosio_token_serializer.variant_to_binary("transfer",
-						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"0 LAT\",\"memo\":\"${l}\"}",
+						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"1.0000 LAT\",\"memo\":\"${l}\"}",
 						 fc::mutable_variant_object()("from",accounts[b_index].to_string())("to",accounts[a_index].to_string())("l", tx_salt))),
 						 abi_serializer::create_yield_function( abi_serializer_max_time ));
 		 
@@ -428,6 +474,130 @@ struct txn_test_gen_plugin_impl {
          trx.sign(b_priv_key, chainid);
          trxs.emplace_back(std::move(trx));
          }
+         }
+      } catch ( const fc::exception& e ) {
+         next(e.dynamic_copy_exception());
+      }
+
+      push_transactions(std::move(trxs), next);
+   }
+
+   void send_erc20_tx(std::function<void(const fc::exception_ptr&)> next, uint64_t nonce_prefix) {
+      std::vector<signed_transaction> trxs;
+      trxs.reserve(batch);
+
+      try {
+         controller& cc = app().get_plugin<chain_plugin>().chain();
+		 auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();	  
+		 abi_serializer custom_abi_serializer{fc::json::from_string(erc20ABISerializer).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
+         auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
+
+         static uint64_t nonce = static_cast<uint64_t>(fc::time_point::now().sec_since_epoch()) << 32;
+         uint32_t reference_block_num = cc.last_irreversible_block_num();
+         if (txn_reference_block_lag >= 0) {
+            reference_block_num = cc.head_block_num();
+            if (reference_block_num <= (uint32_t)txn_reference_block_lag) {
+               reference_block_num = 0;
+            } else {
+               reference_block_num -= (uint32_t)txn_reference_block_lag;
+            }
+         }
+         block_id_type reference_block_id = cc.get_block_id_for_num(reference_block_num);
+
+		 uint64_t seed = nonce;
+         for(unsigned int i = 0; i < batch; ++i) {
+		 	
+          uint16_t nonce_index = uint16_t(seed % total_accounts)+i;
+          uint16_t a_index = nonce_index >= total_accounts?(nonce_index-total_accounts):nonce_index;
+          uint16_t b_index = (a_index+batch) >= total_accounts?(a_index+batch-total_accounts):(a_index+batch);
+		  if(b_index == a_index) {
+		 	 b_index = a_index + uint16_t(total_accounts/2);
+		  }
+		 
+          fc::crypto::private_key a_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(accounts[a_index].to_string()));
+		  {
+		  //create the actions here
+	      action act;
+		  act.account = erc20Account;
+		  act.name = string_to_name(erc20Func);
+		  act.authorization = vector<permission_level>{{accounts[a_index],config::active_name}};
+		  act.data = custom_abi_serializer.variant_to_binary(erc20Func,
+					 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"${quantity} LAT\",\"memo\":\"${l}\"}",
+					 fc::mutable_variant_object()("from",accounts[a_index].to_string())("to",accounts[b_index].to_string())("quantity", erc20Qunatity)("l", tx_salt))),
+					 abi_serializer::create_yield_function( abi_serializer_max_time ));
+		 
+          signed_transaction trx;
+          trx.actions.push_back(act);
+          trx.context_free_actions.emplace_back(action({}, config::null_account_name, name("nonce"), fc::raw::pack( std::to_string(nonce_prefix)+std::to_string(nonce++) )));
+          trx.set_reference_block(reference_block_id);
+          trx.expiration = cc.head_block_time() + fc::seconds(30);
+          trx.max_net_usage_words = 100;
+          trx.sign(a_priv_key, chainid);
+          trxs.emplace_back(std::move(trx));		 
+          }
+         }
+      } catch ( const fc::exception& e ) {
+         next(e.dynamic_copy_exception());
+      }
+
+      push_transactions(std::move(trxs), next);
+   }
+   
+   void send_kv_tx(std::function<void(const fc::exception_ptr&)> next, uint64_t nonce_prefix) {
+      std::vector<signed_transaction> trxs;
+      trxs.reserve(batch);
+
+      try {
+         controller& cc = app().get_plugin<chain_plugin>().chain();
+		 auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
+	  
+	     std::string abi;
+		 fc::read_file_contents(kvABISerializer, abi);
+		 abi_serializer custom_abi_serializer{fc::json::from_string(abi).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
+		 auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
+
+         static uint64_t nonce = static_cast<uint64_t>(fc::time_point::now().sec_since_epoch()) << 32;
+         uint32_t reference_block_num = cc.last_irreversible_block_num();
+         if (txn_reference_block_lag >= 0) {
+            reference_block_num = cc.head_block_num();
+            if (reference_block_num <= (uint32_t)txn_reference_block_lag) {
+               reference_block_num = 0;
+            } else {
+               reference_block_num -= (uint32_t)txn_reference_block_lag;
+            }
+         }
+         block_id_type reference_block_id = cc.get_block_id_for_num(reference_block_num);
+
+		 uint64_t seed = nonce;
+		 fc::sha256 keySeed = fc::sha256::hash(seed);
+		 for(unsigned int i = 0; i < batch; ++i) {
+		  keySeed = fc::sha256::hash(keySeed);
+		  uint64_t key = keySeed._hash[0];
+          uint16_t nonce_index = uint16_t(seed % total_accounts)+i;
+          uint16_t a_index = nonce_index >= total_accounts?(nonce_index-total_accounts):nonce_index;
+		 
+          fc::crypto::private_key a_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(accounts[a_index].to_string()));
+		  {
+		  //create the actions here
+	      action act;
+		  act.account = kvAccount;
+		  act.name = string_to_name(kvFunc);
+		  act.authorization = vector<permission_level>{{accounts[a_index],config::active_name}};
+		  std::string func_params = fc::format_string("{\"primary_key\":\"${primary_key}\",\"n\":\"${n}\"}",
+					 fc::mutable_variant_object()("primary_key",std::to_string(key))("n",std::to_string(kvParamN)));
+		  act.data = custom_abi_serializer.variant_to_binary(kvFunc,
+					 fc::json::from_string(func_params),
+					 abi_serializer::create_yield_function( abi_serializer_max_time ));
+		 
+          signed_transaction trx;
+          trx.actions.push_back(act);
+          trx.context_free_actions.emplace_back(action({}, config::null_account_name, name("nonce"), fc::raw::pack( std::to_string(nonce_prefix)+std::to_string(nonce++) )));
+          trx.set_reference_block(reference_block_id);
+          trx.expiration = cc.head_block_time() + fc::seconds(180);
+          trx.max_net_usage_words = 5000;
+          trx.sign(a_priv_key, chainid);
+          trxs.emplace_back(std::move(trx));		 
+          }
          }
       } catch ( const fc::exception& e ) {
          next(e.dynamic_copy_exception());
@@ -458,8 +628,6 @@ struct txn_test_gen_plugin_impl {
    std::string tx_salt;
    unsigned batch;
    uint64_t nonce_prefix;
-   std::string tx_quantity;
-
    int32_t txn_reference_block_lag;
 };
 
@@ -472,6 +640,14 @@ void txn_test_gen_plugin::set_program_options(options_description&, options_desc
       ("txn-test-gen-threads", bpo::value<uint16_t>()->default_value(2), "Number of worker threads in txn_test_gen thread pool")
       ("txn-test-gen-account-prefix", bpo::value<string>()->default_value("tx"), "Prefix to use for accounts generated and used by this plugin")
       ("txn-test-gen-account-number", bpo::value<uint16_t>()->default_value(5000), "Total number of accounts")
+      ("txn-test-gen-erc20-account", bpo::value<string>()->default_value("erc20"), "ERC20 account name")
+      ("txn-test-gen-erc20-func", bpo::value<string>()->default_value("transfer"), "ERC20 function name")
+      ("txn-test-gen-erc20-abiserializer", bpo::value<string>()->default_value(""), "ERC20 contract abiserializer")
+      ("txn-test-gen-erc20-quantity", bpo::value<string>()->default_value("1"), "ERC20 tx default transfer value")
+      ("txn-test-gen-kv-account", bpo::value<string>()->default_value("keyvalue"), "K-V sc account name")
+      ("txn-test-gen-kv-func", bpo::value<string>()->default_value("modifys"), "K-V sc function name")
+      ("txn-test-gen-kv-abiserializer", bpo::value<string>()->default_value(""), "K-V sc abiserializer")
+      ("txn-test-gen-kv-n", bpo::value<uint64_t>()->default_value(2), "K-V sc SetKV func n")
    ;
 }
 
@@ -501,8 +677,19 @@ void txn_test_gen_plugin::plugin_initialize(const variables_map& options) {
       my.reset( new txn_test_gen_plugin_impl );
       my->txn_reference_block_lag = options.at( "txn-reference-block-lag" ).as<int32_t>();
       my->thread_pool_size = options.at( "txn-test-gen-threads" ).as<uint16_t>();
-      my->total_accounts = options.at( "txn-test-gen-account-number" ).as<uint16_t>();	  
+      my->total_accounts = options.at( "txn-test-gen-account-number" ).as<uint16_t>();
       const std::string thread_pool_account_prefix = options.at( "txn-test-gen-account-prefix" ).as<std::string>();
+	  // custom params
+	  my->erc20Account =eosio::chain::name(options.at( "txn-test-gen-erc20-account" ).as<std::string>());
+      my->erc20Func = options.at( "txn-test-gen-erc20-func" ).as<std::string>();
+      my->erc20ABISerializer = options.at( "txn-test-gen-erc20-abiserializer" ).as<std::string>();
+      my->erc20Qunatity = options.at( "txn-test-gen-erc20-quantity" ).as<std::string>();
+	  
+	  my->kvAccount =eosio::chain::name(options.at( "txn-test-gen-kv-account" ).as<std::string>());
+      my->kvFunc = options.at( "txn-test-gen-kv-func" ).as<std::string>();
+      my->kvABISerializer = options.at( "txn-test-gen-kv-abiserializer" ).as<std::string>();
+      my->kvParamN = options.at( "txn-test-gen-kv-n" ).as<uint64_t>();
+	  // ---------
 	  my->accounts.reserve(my->total_accounts);
 
 	  for(uint16_t i=0; i<my->total_accounts; ++i) {
@@ -521,7 +708,7 @@ void txn_test_gen_plugin::plugin_startup() {
       CALL_ASYNC(txn_test_gen, my, create_test_accounts, INVOKE_ASYNC_R_R(my, create_test_accounts, std::string, std::string), 200),
       CALL_ASYNC(txn_test_gen, my, init_test_accounts, INVOKE_ASYNC_R_R(my, init_test_accounts, std::string, std::string), 200),
       CALL(txn_test_gen, my, stop_generation, INVOKE_V_V(my, stop_generation), 200),
-      CALL(txn_test_gen, my, start_generation, INVOKE_V_R_R_R(my, start_generation, std::string, uint64_t, std::string, uint64_t), 200)
+      CALL(txn_test_gen, my, start_generation, INVOKE_V_R_R_R_R(my, start_generation, std::string, uint8_t, uint64_t, uint64_t), 200)
    });
 }
 
