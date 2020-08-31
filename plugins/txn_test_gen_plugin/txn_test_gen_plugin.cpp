@@ -249,7 +249,9 @@ struct txn_test_gen_plugin_impl {
          controller& cc = app().get_plugin<chain_plugin>().chain();
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
          auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
-         abi_serializer eosio_token_serializer{fc::json::from_string(contracts::eosio_token_abi().data()).as<abi_def>(),
+	     std::string abi;
+		 fc::read_file_contents(tokenABISerializer, abi);
+         abi_serializer eosio_token_serializer{fc::json::from_string(abi).as<abi_def>(),
                                                abi_serializer::create_yield_function( abi_serializer_max_time )};
          fc::crypto::private_key creator_priv_key = fc::crypto::private_key(init_priv_key);
 		 fc::crypto::private_key txn_test_receiver_C_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(64, 'c')));
@@ -289,7 +291,9 @@ struct txn_test_gen_plugin_impl {
          controller& cc = app().get_plugin<chain_plugin>().chain();
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
          auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
-         abi_serializer eosio_token_serializer{fc::json::from_string(contracts::eosio_token_abi().data()).as<abi_def>(),
+	     std::string abi;
+		 fc::read_file_contents(tokenABISerializer, abi);
+         abi_serializer eosio_token_serializer{fc::json::from_string(abi).as<abi_def>(),
                                                abi_serializer::create_yield_function( abi_serializer_max_time )};
 		 fc::crypto::private_key txn_test_receiver_C_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(64, 'c')));
 		 for(unsigned int i = 0; i < total_accounts; ++i) {
