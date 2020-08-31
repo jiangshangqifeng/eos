@@ -120,6 +120,7 @@ struct txn_test_gen_plugin_impl {
    // key-value   
    name kvAccount;
    std::string kvFunc;
+   std::string tokenABISerializer;
    std::string kvABISerializer;
    uint64_t kvParamN;
 
@@ -403,7 +404,10 @@ struct txn_test_gen_plugin_impl {
       try {
          controller& cc = app().get_plugin<chain_plugin>().chain();
 		 auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
-		 abi_serializer eosio_token_serializer{fc::json::from_string(contracts::eosio_token_abi().data()).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
+	  
+	     std::string abi;
+		 fc::read_file_contents(tokenABISerializer, abi);
+		 abi_serializer eosio_token_serializer{fc::json::from_string(fc::json::from_string(abi).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
 
          static uint64_t nonce = static_cast<uint64_t>(fc::time_point::now().sec_since_epoch()) << 32;
@@ -646,6 +650,7 @@ void txn_test_gen_plugin::set_program_options(options_description&, options_desc
       ("txn-test-gen-erc20-quantity", bpo::value<string>()->default_value("1"), "ERC20 tx default transfer value")
       ("txn-test-gen-kv-account", bpo::value<string>()->default_value("keyvalue"), "K-V sc account name")
       ("txn-test-gen-kv-func", bpo::value<string>()->default_value("modifys"), "K-V sc function name")
+      ("txn-test-gen-token-abiserializer", bpo::value<string>()->default_value(""), "Token sc abiserializer")
       ("txn-test-gen-kv-abiserializer", bpo::value<string>()->default_value(""), "K-V sc abiserializer")
       ("txn-test-gen-kv-n", bpo::value<uint64_t>()->default_value(2), "K-V sc SetKV func n")
    ;
@@ -688,6 +693,7 @@ void txn_test_gen_plugin::plugin_initialize(const variables_map& options) {
 	  my->kvAccount =eosio::chain::name(options.at( "txn-test-gen-kv-account" ).as<std::string>());
       my->kvFunc = options.at( "txn-test-gen-kv-func" ).as<std::string>();
       my->kvABISerializer = options.at( "txn-test-gen-kv-abiserializer" ).as<std::string>();
+      my->tokenABISerializer = options.at( "txn-test-gen-token-abiserializer" ).as<std::string>();
       my->kvParamN = options.at( "txn-test-gen-kv-n" ).as<uint64_t>();
 	  // ---------
 	  my->accounts.reserve(my->total_accounts);
