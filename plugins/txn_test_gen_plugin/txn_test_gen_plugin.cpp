@@ -407,7 +407,7 @@ struct txn_test_gen_plugin_impl {
 	  
 	     std::string abi;
 		 fc::read_file_contents(tokenABISerializer, abi);
-		 abi_serializer eosio_token_serializer{fc::json::from_string(fc::json::from_string(abi).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
+		 abi_serializer eosio_token_serializer{fc::json::from_string(abi).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
 
          static uint64_t nonce = static_cast<uint64_t>(fc::time_point::now().sec_since_epoch()) << 32;
