@@ -220,7 +220,7 @@ struct txn_test_gen_plugin_impl {
                act.name = N(issue);
                act.authorization = vector<permission_level>{{newaccountT,config::active_name}};
                act.data = eosio_token_serializer.variant_to_binary("issue",
-                                   fc::json::from_string(fc::format_string("{\"to\":\"${to}\",\"quantity\":\"600000000000.0000 LAT\",\"memo\":\"\"}",
+                                   fc::json::from_string(fc::format_string("{\"to\":\"${to}\",\"quantity\":\"800000000000.0000 LAT\",\"memo\":\"\"}",
                                    fc::mutable_variant_object()("to",newaccountT.to_string()))),
                                    abi_serializer::create_yield_function( abi_serializer_max_time ));
                trx.actions.push_back(act);
