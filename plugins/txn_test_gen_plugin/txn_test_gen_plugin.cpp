@@ -703,7 +703,7 @@ void txn_test_gen_plugin::plugin_initialize(const variables_map& options) {
                   "tokenABI empty", ("my->tokenABISerializer", my->tokenABISerializer) );
       EOS_ASSERT( my->kvABI.length() > 0, chain::plugin_config_exception,
                   "kvABI empty", ("my->kvABISerializer", my->kvABISerializer) );
-      my->newaccountT = "txt";
+      my->newaccountT = eosio::chain::name("txt");
       EOS_ASSERT( my->thread_pool_size > 0, chain::plugin_config_exception,
                   "txn-test-gen-threads ${num} must be greater than 0", ("num", my->thread_pool_size) );
    } FC_LOG_AND_RETHROW()
