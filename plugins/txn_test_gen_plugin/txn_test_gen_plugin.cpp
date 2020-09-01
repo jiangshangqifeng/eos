@@ -250,10 +250,6 @@ struct txn_test_gen_plugin_impl {
          name creator(init_name);
          controller& cc = app().get_plugin<chain_plugin>().chain();
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
-         auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
-		 ilog("create_test_accounts tokenABISerializer=${a} abi= ${s}", ("a", tokenABISerializer)("s", tokenABI));
-         abi_serializer eosio_token_serializer{fc::json::from_string(tokenABI).as<abi_def>(),
-                                               abi_serializer::create_yield_function( abi_serializer_max_time )};
          fc::crypto::private_key creator_priv_key = fc::crypto::private_key(init_priv_key);
 		 fc::crypto::private_key txn_test_receiver_C_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(64, 'c')));
 
@@ -707,7 +703,7 @@ void txn_test_gen_plugin::plugin_initialize(const variables_map& options) {
                   "tokenABI empty", ("my->tokenABISerializer", my->tokenABISerializer) );
       EOS_ASSERT( my->kvABI.length() > 0, chain::plugin_config_exception,
                   "kvABI empty", ("my->kvABISerializer", my->kvABISerializer) );
-      my->newaccountT = eosio::chain::name(thread_pool_account_prefix + "t");
+      my->newaccountT = "txt";
       EOS_ASSERT( my->thread_pool_size > 0, chain::plugin_config_exception,
                   "txn-test-gen-threads ${num} must be greater than 0", ("num", my->thread_pool_size) );
    } FC_LOG_AND_RETHROW()
