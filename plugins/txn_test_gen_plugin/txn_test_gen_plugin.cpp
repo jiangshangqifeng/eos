@@ -122,6 +122,8 @@ struct txn_test_gen_plugin_impl {
    std::string kvFunc;
    std::string tokenABISerializer;
    std::string kvABISerializer;
+   std::string tokenABI;
+   std::string kvABI;
    uint64_t kvParamN;
 
    void push_next_transaction(const std::shared_ptr<std::vector<signed_transaction>>& trxs, const std::function<void(const fc::exception_ptr&)>& next ) {
@@ -159,7 +161,7 @@ struct txn_test_gen_plugin_impl {
 		 auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
 		 auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
 	  
-		 abi_serializer eosio_token_serializer{fc::json::from_string(contracts::eosio_token_abi().data()).as<abi_def>(),
+		 abi_serializer eosio_token_serializer{fc::json::from_string(tokenABI).as<abi_def>(),
 											  abi_serializer::create_yield_function( abi_serializer_max_time )};
 		 
          fc::crypto::private_key creator_priv_key = fc::crypto::private_key(init_priv_key);
@@ -197,7 +199,7 @@ struct txn_test_gen_plugin_impl {
             {
                setabi handler;
                handler.account = newaccountT;
-               handler.abi = fc::raw::pack(json::from_string(contracts::eosio_token_abi().data()).as<abi_def>());
+               handler.abi = fc::raw::pack(json::from_string(tokenABI).as<abi_def>());
                trx.actions.emplace_back( vector<chain::permission_level>{{newaccountT,name("active")}}, handler);
             }
 
@@ -249,12 +251,13 @@ struct txn_test_gen_plugin_impl {
          controller& cc = app().get_plugin<chain_plugin>().chain();
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
          auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
-	     std::string abi;
-		 fc::read_file_contents(tokenABISerializer, abi);
-         abi_serializer eosio_token_serializer{fc::json::from_string(abi).as<abi_def>(),
+		 ilog("create_test_accounts tokenABISerializer=${a} abi= ${s}", ("a", tokenABISerializer)("s", tokenABI));
+         abi_serializer eosio_token_serializer{fc::json::from_string(tokenABI).as<abi_def>(),
                                                abi_serializer::create_yield_function( abi_serializer_max_time )};
          fc::crypto::private_key creator_priv_key = fc::crypto::private_key(init_priv_key);
 		 fc::crypto::private_key txn_test_receiver_C_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(64, 'c')));
+
+		 ilog("create_test_accounts txn_test_receiver_C_priv_key= ${s}", ("s", txn_test_receiver_C_priv_key.to_string()));
 
 		 for(unsigned int i = 0; i < total_accounts; ++i) {
 		     fc::crypto::private_key txn_test_receiver_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(accounts[i].to_string()));
@@ -291,9 +294,7 @@ struct txn_test_gen_plugin_impl {
          controller& cc = app().get_plugin<chain_plugin>().chain();
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
          auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
-	     std::string abi;
-		 fc::read_file_contents(tokenABISerializer, abi);
-         abi_serializer eosio_token_serializer{fc::json::from_string(abi).as<abi_def>(),
+         abi_serializer eosio_token_serializer{fc::json::from_string(tokenABI).as<abi_def>(),
                                                abi_serializer::create_yield_function( abi_serializer_max_time )};
 		 fc::crypto::private_key txn_test_receiver_C_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(64, 'c')));
 		 for(unsigned int i = 0; i < total_accounts; ++i) {
@@ -408,10 +409,7 @@ struct txn_test_gen_plugin_impl {
       try {
          controller& cc = app().get_plugin<chain_plugin>().chain();
 		 auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
-	  
-	     std::string abi;
-		 fc::read_file_contents(tokenABISerializer, abi);
-		 abi_serializer eosio_token_serializer{fc::json::from_string(abi).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
+		 abi_serializer eosio_token_serializer{fc::json::from_string(tokenABI).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
 
          static uint64_t nonce = static_cast<uint64_t>(fc::time_point::now().sec_since_epoch()) << 32;
@@ -558,10 +556,7 @@ struct txn_test_gen_plugin_impl {
       try {
          controller& cc = app().get_plugin<chain_plugin>().chain();
 		 auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
-	  
-	     std::string abi;
-		 fc::read_file_contents(kvABISerializer, abi);
-		 abi_serializer custom_abi_serializer{fc::json::from_string(abi).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
+		 abi_serializer custom_abi_serializer{fc::json::from_string(kvABI).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
 		 auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
 
          static uint64_t nonce = static_cast<uint64_t>(fc::time_point::now().sec_since_epoch()) << 32;
@@ -706,6 +701,12 @@ void txn_test_gen_plugin::plugin_initialize(const variables_map& options) {
 		my->accounts.push_back(eosio::chain::name(thread_pool_account_prefix + gen_random_account_name(i)));
 	  }
 	  
+	  fc::read_file_contents(my->tokenABISerializer, my->tokenABI);
+	  fc::read_file_contents(my->kvABISerializer, my->kvABI);
+      EOS_ASSERT( my->tokenABI.length() > 0, chain::plugin_config_exception,
+                  "tokenABI empty", ("my->tokenABISerializer", my->tokenABISerializer) );
+      EOS_ASSERT( my->kvABI.length() > 0, chain::plugin_config_exception,
+                  "kvABI empty", ("my->kvABISerializer", my->kvABISerializer) );
       my->newaccountT = eosio::chain::name(thread_pool_account_prefix + "t");
       EOS_ASSERT( my->thread_pool_size > 0, chain::plugin_config_exception,
                   "txn-test-gen-threads ${num} must be greater than 0", ("num", my->thread_pool_size) );
