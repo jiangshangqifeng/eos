@@ -124,7 +124,6 @@ struct txn_test_gen_plugin_impl {
    std::string kvABISerializer;
    std::string tokenABI;
    std::string kvABI;
-   uint64_t kvParamN;
 
    void push_next_transaction(const std::shared_ptr<std::vector<signed_transaction>>& trxs, const std::function<void(const fc::exception_ptr&)>& next ) {
       chain_plugin& cp = app().get_plugin<chain_plugin>();
@@ -568,10 +567,7 @@ struct txn_test_gen_plugin_impl {
          block_id_type reference_block_id = cc.get_block_id_for_num(reference_block_num);
 
 		 uint64_t seed = nonce;
-		 fc::sha256 keySeed = fc::sha256::hash(seed);
 		 for(unsigned int i = 0; i < batch; ++i) {
-		  keySeed = fc::sha256::hash(keySeed);
-		  uint64_t key = keySeed._hash[0];
           uint16_t nonce_index = uint16_t(seed % total_accounts)+i;
           uint16_t a_index = nonce_index >= total_accounts?(nonce_index-total_accounts):nonce_index;
 		 
@@ -582,8 +578,8 @@ struct txn_test_gen_plugin_impl {
 		  act.account = kvAccount;
 		  act.name = string_to_name(kvFunc);
 		  act.authorization = vector<permission_level>{{accounts[a_index],config::active_name}};
-		  std::string func_params = fc::format_string("{\"primary_key\":\"${primary_key}\",\"n\":\"${n}\"}",
-					 fc::mutable_variant_object()("primary_key",std::to_string(key))("n",std::to_string(kvParamN)));
+		  std::string func_params = fc::format_string("{\"v\":\"${v}\"}",
+					 fc::mutable_variant_object()("v",std::to_string(nonce)));
 		  act.data = custom_abi_serializer.variant_to_binary(kvFunc,
 					 fc::json::from_string(func_params),
 					 abi_serializer::create_yield_function( abi_serializer_max_time ));
@@ -647,7 +643,6 @@ void txn_test_gen_plugin::set_program_options(options_description&, options_desc
       ("txn-test-gen-kv-func", bpo::value<string>()->default_value("modifys"), "K-V sc function name")
       ("txn-test-gen-token-abiserializer", bpo::value<string>()->default_value(""), "Token sc abiserializer")
       ("txn-test-gen-kv-abiserializer", bpo::value<string>()->default_value(""), "K-V sc abiserializer")
-      ("txn-test-gen-kv-n", bpo::value<uint64_t>()->default_value(2), "K-V sc SetKV func n")
    ;
 }
 
@@ -689,7 +684,6 @@ void txn_test_gen_plugin::plugin_initialize(const variables_map& options) {
       my->kvFunc = options.at( "txn-test-gen-kv-func" ).as<std::string>();
       my->kvABISerializer = options.at( "txn-test-gen-kv-abiserializer" ).as<std::string>();
       my->tokenABISerializer = options.at( "txn-test-gen-token-abiserializer" ).as<std::string>();
-      my->kvParamN = options.at( "txn-test-gen-kv-n" ).as<uint64_t>();
 	  // ---------
 	  my->accounts.reserve(my->total_accounts);
 
