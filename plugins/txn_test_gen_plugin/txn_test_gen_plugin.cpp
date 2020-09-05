@@ -112,11 +112,12 @@ struct txn_test_gen_plugin_impl {
    name newaccountT;
 
    // custom tx
-   // erc20
-   name erc20Account;
-   std::string erc20Func;
-   std::string erc20ABISerializer;
-   std::string erc20Qunatity;
+   // insertionSort
+   name insertionSortAccount;
+   std::string insertionSortFunc;
+   std::string insertionSortABISerializer;
+   std::string insertionSortABI;
+   
    // key-value   
    name kvAccount;
    std::string kvFunc;
@@ -381,7 +382,7 @@ struct txn_test_gen_plugin_impl {
 	 	   	}
 	 	   case 1:
 	 	   	{
-		   	send_erc20_tx(next, nonce_prefix);
+		   	send_insertionSort_tx(next, nonce_prefix);
 		    break;
 	 	   	}
 	 	   case 2:
@@ -483,16 +484,15 @@ struct txn_test_gen_plugin_impl {
       push_transactions(std::move(trxs), next);
    }
 
-   void send_erc20_tx(std::function<void(const fc::exception_ptr&)> next, uint64_t nonce_prefix) {
+   void send_insertionSort_tx(std::function<void(const fc::exception_ptr&)> next, uint64_t nonce_prefix) {
       std::vector<signed_transaction> trxs;
       trxs.reserve(batch);
 
       try {
          controller& cc = app().get_plugin<chain_plugin>().chain();
-		 auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();	  
-		 abi_serializer custom_abi_serializer{fc::json::from_string(erc20ABISerializer).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
+		 auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
+		 abi_serializer custom_abi_serializer{fc::json::from_string(insertionSortABI).as<abi_def>(), abi_serializer::create_yield_function( abi_serializer_max_time )};
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
-
          static uint64_t nonce = static_cast<uint64_t>(fc::time_point::now().sec_since_epoch()) << 32;
          uint32_t reference_block_num = cc.last_irreversible_block_num();
          if (txn_reference_block_lag >= 0) {
@@ -519,14 +519,13 @@ struct txn_test_gen_plugin_impl {
 		  {
 		  //create the actions here
 	      action act;
-		  act.account = erc20Account;
-		  act.name = string_to_name(erc20Func);
+		  act.account = insertionSortAccount;
+		  act.name = string_to_name(insertionSortFunc);
 		  act.authorization = vector<permission_level>{{accounts[a_index],config::active_name}};
-		  act.data = custom_abi_serializer.variant_to_binary(erc20Func,
-					 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"${quantity} LAT\",\"memo\":\"${l}\"}",
-					 fc::mutable_variant_object()("from",accounts[a_index].to_string())("to",accounts[b_index].to_string())("quantity", erc20Qunatity)("l", tx_salt))),
-					 abi_serializer::create_yield_function( abi_serializer_max_time ));
-		 
+		  std::string func_params = fc::format_string("{\"p1\":\"${p}\"}",
+					 fc::mutable_variant_object()("p",std::to_string(20)));
+		  act.data = custom_abi_serializer.variant_to_binary(insertionSortFunc,
+		             fc::json::from_string(func_params), abi_serializer::create_yield_function( abi_serializer_max_time ));
           signed_transaction trx;
           trx.actions.push_back(act);
           trx.context_free_actions.emplace_back(action({}, config::null_account_name, name("nonce"), fc::raw::pack( std::to_string(nonce_prefix)+std::to_string(nonce++) )));
@@ -534,7 +533,7 @@ struct txn_test_gen_plugin_impl {
           trx.expiration = cc.head_block_time() + fc::seconds(3600);
           trx.max_net_usage_words = 100;
           trx.sign(a_priv_key, chainid);
-          trxs.emplace_back(std::move(trx));		 
+          trxs.emplace_back(std::move(trx));
           }
          }
       } catch ( const fc::exception& e ) {
@@ -635,10 +634,9 @@ void txn_test_gen_plugin::set_program_options(options_description&, options_desc
       ("txn-test-gen-threads", bpo::value<uint16_t>()->default_value(2), "Number of worker threads in txn_test_gen thread pool")
       ("txn-test-gen-account-prefix", bpo::value<string>()->default_value("tx"), "Prefix to use for accounts generated and used by this plugin")
       ("txn-test-gen-account-number", bpo::value<uint16_t>()->default_value(5000), "Total number of accounts")
-      ("txn-test-gen-erc20-account", bpo::value<string>()->default_value("erc20"), "ERC20 account name")
-      ("txn-test-gen-erc20-func", bpo::value<string>()->default_value("transfer"), "ERC20 function name")
-      ("txn-test-gen-erc20-abiserializer", bpo::value<string>()->default_value(""), "ERC20 contract abiserializer")
-      ("txn-test-gen-erc20-quantity", bpo::value<string>()->default_value("1"), "ERC20 tx default transfer value")
+      ("txn-test-gen-is-account", bpo::value<string>()->default_value("is"), "insertionSort account name")
+      ("txn-test-gen-is-func", bpo::value<string>()->default_value("transfer"), "insertionSort function name")
+      ("txn-test-gen-is-abiserializer", bpo::value<string>()->default_value(""), "insertionSort contract abiserializer")
       ("txn-test-gen-kv-account", bpo::value<string>()->default_value("keyvalue"), "K-V sc account name")
       ("txn-test-gen-kv-func", bpo::value<string>()->default_value("modifys"), "K-V sc function name")
       ("txn-test-gen-token-abiserializer", bpo::value<string>()->default_value(""), "Token sc abiserializer")
@@ -675,10 +673,9 @@ void txn_test_gen_plugin::plugin_initialize(const variables_map& options) {
       my->total_accounts = options.at( "txn-test-gen-account-number" ).as<uint16_t>();
       const std::string thread_pool_account_prefix = options.at( "txn-test-gen-account-prefix" ).as<std::string>();
 	  // custom params
-	  my->erc20Account =eosio::chain::name(options.at( "txn-test-gen-erc20-account" ).as<std::string>());
-      my->erc20Func = options.at( "txn-test-gen-erc20-func" ).as<std::string>();
-      my->erc20ABISerializer = options.at( "txn-test-gen-erc20-abiserializer" ).as<std::string>();
-      my->erc20Qunatity = options.at( "txn-test-gen-erc20-quantity" ).as<std::string>();
+	  my->insertionSortAccount =eosio::chain::name(options.at( "txn-test-gen-is-account" ).as<std::string>());
+      my->insertionSortFunc = options.at( "txn-test-gen-is-func" ).as<std::string>();
+      my->insertionSortABISerializer = options.at( "txn-test-gen-is-abiserializer" ).as<std::string>();
 	  
 	  my->kvAccount =eosio::chain::name(options.at( "txn-test-gen-kv-account" ).as<std::string>());
       my->kvFunc = options.at( "txn-test-gen-kv-func" ).as<std::string>();
@@ -693,10 +690,13 @@ void txn_test_gen_plugin::plugin_initialize(const variables_map& options) {
 	  
 	  fc::read_file_contents(my->tokenABISerializer, my->tokenABI);
 	  fc::read_file_contents(my->kvABISerializer, my->kvABI);
+	  fc::read_file_contents(my->insertionSortABISerializer, my->insertionSortABI);
       EOS_ASSERT( my->tokenABI.length() > 0, chain::plugin_config_exception,
                   "tokenABI empty", ("my->tokenABISerializer", my->tokenABISerializer) );
       EOS_ASSERT( my->kvABI.length() > 0, chain::plugin_config_exception,
                   "kvABI empty", ("my->kvABISerializer", my->kvABISerializer) );
+      EOS_ASSERT( my->insertionSortABI.length() > 0, chain::plugin_config_exception,
+                  "insertionSortABI empty", ("my->insertionSortABISerializer", my->insertionSortABISerializer) );
       my->newaccountT = eosio::chain::name("txt");
       EOS_ASSERT( my->thread_pool_size > 0, chain::plugin_config_exception,
                   "txn-test-gen-threads ${num} must be greater than 0", ("num", my->thread_pool_size) );
