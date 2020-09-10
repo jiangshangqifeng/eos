@@ -109,7 +109,7 @@ struct txn_test_gen_plugin_impl {
    uint16_t total_accounts;
    uint8_t tx_type;
    std::vector<name> accounts;
-   name testContract;
+   name newaccountT;
 
    // custom tx
    // insertionSort
@@ -128,12 +128,6 @@ struct txn_test_gen_plugin_impl {
 
    void push_next_transaction(const std::shared_ptr<std::vector<signed_transaction>>& trxs, const std::function<void(const fc::exception_ptr&)>& next ) {
       chain_plugin& cp = app().get_plugin<chain_plugin>();
-	  
-	  std::hash<std::thread::id> hasher;
-      long int pid = hasher(std::this_thread::get_id());
-	  
-	  std::ofstream txlog( "");
-	  print_default_config(out_cfg);
 
       for (size_t i = 0; i < trxs->size(); ++i) {
          cp.accept_transaction( std::make_shared<packed_transaction>(trxs->at(i)), [=](const fc::static_variant<fc::exception_ptr, transaction_trace_ptr>& result){
@@ -142,15 +136,11 @@ struct txn_test_gen_plugin_impl {
             } else {
                if (result.contains<transaction_trace_ptr>() && result.get<transaction_trace_ptr>()->receipt) {
                   _total_us += result.get<transaction_trace_ptr>()->receipt->cpu_usage_us;
-				  
-         		  os << "# " << od->long_name() << " = " << std::endl;
-			   
                   ++_txcount;
                }
             }
          });
       }
-	 txlog.close();	 
    }
 
    void push_transactions( std::vector<signed_transaction>&& trxs, const std::function<void(fc::exception_ptr)>& next ) {
@@ -160,104 +150,116 @@ struct txn_test_gen_plugin_impl {
       });
    }
 
-  std::vector<signed_transaction> create_test_contract(const name& creator, const fc::crypto::private_key& creator_priv_key) {  
-	 std::vector<signed_transaction> trxs;
-	 trxs.reserve(2);
-	 controller& cc = app().get_plugin<chain_plugin>().chain();
-	 auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
-	 auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();	  
-	 abi_serializer eosio_token_serializer{fc::json::from_string(tokenABI).as<abi_def>(),
-					abi_serializer::create_yield_function( abi_serializer_max_time )};
-	 fc::crypto::private_key txn_test_contract_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash("txt"));
-	 fc::crypto::public_key  txn_test_contract_pub_key = txn_test_contract_priv_key.get_public_key();
-  
-	 {
-		signed_transaction trx;
-		{
-		auto owner_auth   = eosio::chain::authority{1, {{txn_test_contract_pub_key, 1}}, {}};
-		auto active_auth  = eosio::chain::authority{1, {{txn_test_contract_pub_key, 1}}, {}};
-		trx.actions.emplace_back(vector<chain::permission_level>{{creator,name("active")}}, newaccount{creator, testContract, owner_auth, active_auth});
-		}
-  
-		trx.expiration = cc.head_block_time() + fc::seconds(180);
-		trx.set_reference_block(cc.head_block_id());
-		trx.sign(creator_priv_key, chainid);
-		trxs.emplace_back(std::move(trx));
-	 }
-	 
-     //set testContract contract to eosio.token & initialize it
-     {
-        signed_transaction trx;
-        vector<uint8_t> wasm = contracts::eosio_token_wasm();
+  void create_newAccountT(const std::string& init_name, const std::string& init_priv_key, const std::function<void(const fc::exception_ptr&)>& next) {  
+	   ilog("create_newAccountT");
+	   std::vector<signed_transaction> trxs;
+	   trxs.reserve(2);
 
-        setcode handler;
-        handler.account = testContract;
-        handler.code.assign(wasm.begin(), wasm.end());
-        trx.actions.emplace_back( vector<chain::permission_level>{{testContract,name("active")}}, handler);
-        {
-           setabi handler;
-           handler.account = testContract;
-           handler.abi = fc::raw::pack(json::from_string(tokenABI).as<abi_def>());
-           trx.actions.emplace_back( vector<chain::permission_level>{{testContract,name("active")}}, handler);
-        }
-        {
-           action act;
-           act.account = testContract;
-           act.name = N(create);
-           act.authorization = vector<permission_level>{{testContract,config::active_name}};
-           act.data = eosio_token_serializer.variant_to_binary("create",
-                               fc::json::from_string(fc::format_string("{\"issuer\":\"${issuer}\",\"maximum_supply\":\"1000000000000.0000 EOS\"}}",
-                               fc::mutable_variant_object()("issuer",testContract.to_string()))),
-                               abi_serializer::create_yield_function( abi_serializer_max_time ));
-           trx.actions.push_back(act);
-        }
-        {
-           action act;
-           act.account = testContract;
-           act.name = N(issue);
-           act.authorization = vector<permission_level>{{testContract,config::active_name}};
-           act.data = eosio_token_serializer.variant_to_binary("issue",
-                               fc::json::from_string(fc::format_string("{\"to\":\"${to}\",\"quantity\":\"800000000000.0000 EOS\",\"memo\":\"\"}",
-                               fc::mutable_variant_object()("to",testContract.to_string()))),
-                               abi_serializer::create_yield_function( abi_serializer_max_time ));
-           trx.actions.push_back(act);
-        }
-		
-        trx.expiration = cc.head_block_time() + fc::seconds(180);
-        trx.set_reference_block(cc.head_block_id());
-        trx.max_net_usage_words = 5000;
-        trx.sign(txn_test_contract_priv_key, chainid);
-        trxs.emplace_back(std::move(trx));
-     }
+	  try {
+		 name creator(init_name);
+		 controller& cc = app().get_plugin<chain_plugin>().chain();
+		 auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
+		 auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
+	  
+		 abi_serializer eosio_token_serializer{fc::json::from_string(tokenABI).as<abi_def>(),
+											  abi_serializer::create_yield_function( abi_serializer_max_time )};
+		 
+         fc::crypto::private_key creator_priv_key = fc::crypto::private_key(init_priv_key);
+		 
+		 fc::crypto::private_key txn_test_receiver_C_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(64, 'c')));
+		 fc::crypto::public_key  txn_text_receiver_C_pub_key = txn_test_receiver_C_priv_key.get_public_key();
+	  
+		 //create newaccountT
+		 {
+			signed_transaction trx;
+			{
+			auto owner_auth   = eosio::chain::authority{1, {{txn_text_receiver_C_pub_key, 1}}, {}};
+			auto active_auth  = eosio::chain::authority{1, {{txn_text_receiver_C_pub_key, 1}}, {}};
+			trx.actions.emplace_back(vector<chain::permission_level>{{creator,name("active")}}, newaccount{creator, newaccountT, owner_auth, active_auth});
+			}
+	  
+			trx.expiration = cc.head_block_time() + fc::seconds(180);
+			trx.set_reference_block(cc.head_block_id());
+			trx.sign(creator_priv_key, chainid);
+			trxs.emplace_back(std::move(trx));
+		 }
+		 
+         //set newaccountT contract to eosio.token & initialize it
+         {
+            signed_transaction trx;
+            vector<uint8_t> wasm = contracts::eosio_token_wasm();
 
-     return trxs;
-}
+            setcode handler;
+            handler.account = newaccountT;
+            handler.code.assign(wasm.begin(), wasm.end());
+            trx.actions.emplace_back( vector<chain::permission_level>{{newaccountT,name("active")}}, handler);
+            {
+               setabi handler;
+               handler.account = newaccountT;
+               handler.abi = fc::raw::pack(json::from_string(tokenABI).as<abi_def>());
+               trx.actions.emplace_back( vector<chain::permission_level>{{newaccountT,name("active")}}, handler);
+            }
+            {
+               action act;
+               act.account = newaccountT;
+               act.name = N(create);
+               act.authorization = vector<permission_level>{{newaccountT,config::active_name}};
+               act.data = eosio_token_serializer.variant_to_binary("create",
+                                   fc::json::from_string(fc::format_string("{\"issuer\":\"${issuer}\",\"maximum_supply\":\"1000000000000.0000 LAT\"}}",
+                                   fc::mutable_variant_object()("issuer",newaccountT.to_string()))),
+                                   abi_serializer::create_yield_function( abi_serializer_max_time ));
+               trx.actions.push_back(act);
+            }
+            {
+               action act;
+               act.account = newaccountT;
+               act.name = N(issue);
+               act.authorization = vector<permission_level>{{newaccountT,config::active_name}};
+               act.data = eosio_token_serializer.variant_to_binary("issue",
+                                   fc::json::from_string(fc::format_string("{\"to\":\"${to}\",\"quantity\":\"800000000000.0000 LAT\",\"memo\":\"\"}",
+                                   fc::mutable_variant_object()("to",newaccountT.to_string()))),
+                                   abi_serializer::create_yield_function( abi_serializer_max_time ));
+               trx.actions.push_back(act);
+            }
+			
+            trx.expiration = cc.head_block_time() + fc::seconds(180);
+            trx.set_reference_block(cc.head_block_id());
+            trx.max_net_usage_words = 5000;
+            trx.sign(txn_test_receiver_C_priv_key, chainid);
+            trxs.emplace_back(std::move(trx));
+         }
+	  	}catch (const fc::exception& e) {
+         next(e.dynamic_copy_exception());
+         return;
+      }
+
+      push_transactions(std::move(trxs), next);
+	  ilog("create_newAccountT OK!");
+  	}
   
-   void create_test_accounts(const std::string& init_name, const std::string& init_priv_key, 
-                                   const std::function<void(const fc::exception_ptr&)>& next) {
+   void create_test_accounts(const std::string& init_name, const std::string& init_priv_key, const std::function<void(const fc::exception_ptr&)>& next) {
       ilog("create_test_accounts accounts.size= ${s}", ("s", accounts.size()));
       std::vector<signed_transaction> trxs;
+      trxs.reserve(total_accounts);
 
       try {
          name creator(init_name);
          controller& cc = app().get_plugin<chain_plugin>().chain();
          auto chainid = app().get_plugin<chain_plugin>().get_chain_id();
          fc::crypto::private_key creator_priv_key = fc::crypto::private_key(init_priv_key);
-		 fc::crypto::private_key txn_test_contract_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash("txt"));
-		 // create test contract first
-		 std::vector<signed_transaction> createTestAccountTxs = create_test_contract(creator, creator_priv_key);
-		 trxs.assign(createTestAccountTxs.begin(), createTestAccountTxs.end());
-      	 trxs.reserve(total_accounts+createTestAccountTxs.size());
-		 
+		 fc::crypto::private_key txn_test_receiver_C_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(64, 'c')));
+
+		 ilog("create_test_accounts txn_test_receiver_C_priv_key= ${s}", ("s", txn_test_receiver_C_priv_key.to_string()));
+
 		 for(unsigned int i = 0; i < total_accounts; ++i) {
 		     fc::crypto::private_key txn_test_receiver_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash(accounts[i].to_string()));
-			 fc::crypto::public_key  txn_test_receiver_pub_key = txn_test_receiver_priv_key.get_public_key();
+			 fc::crypto::public_key  txn_text_receiver_pub_key = txn_test_receiver_priv_key.get_public_key();
 
-			 //create test accounts
+			 //create some accounts
 			{
 			 	signed_transaction trx;
-				auto owner_auth   = eosio::chain::authority{1, {{txn_test_receiver_pub_key, 1}}, {}};
-				auto active_auth  = eosio::chain::authority{1, {{txn_test_receiver_pub_key, 1}}, {}};
+				auto owner_auth   = eosio::chain::authority{1, {{txn_text_receiver_pub_key, 1}}, {}};
+				auto active_auth  = eosio::chain::authority{1, {{txn_text_receiver_pub_key, 1}}, {}};
 				
 				trx.actions.emplace_back(vector<chain::permission_level>{{creator,name("active")}}, newaccount{creator, accounts[i], owner_auth, active_auth});
 		        trx.expiration = cc.head_block_time() + fc::seconds(180);
@@ -265,8 +267,7 @@ struct txn_test_gen_plugin_impl {
 		        trx.sign(creator_priv_key, chainid);
             	trxs.emplace_back(std::move(trx));
 			}
-		 }		 
-		 
+		 }
       } catch (const fc::exception& e) {
          next(e.dynamic_copy_exception());
          return;
@@ -277,6 +278,7 @@ struct txn_test_gen_plugin_impl {
 
 
    void init_test_accounts(const std::string& init_name, const std::string& init_priv_key, const std::function<void(const fc::exception_ptr&)>& next) {
+      ilog("init_test_accounts accounts.size= ${s}", ("s", accounts.size()));
       std::vector<signed_transaction> trxs;
       trxs.reserve(total_accounts);
 
@@ -286,24 +288,24 @@ struct txn_test_gen_plugin_impl {
          auto abi_serializer_max_time = app().get_plugin<chain_plugin>().get_abi_serializer_max_time();
          abi_serializer eosio_token_serializer{fc::json::from_string(tokenABI).as<abi_def>(),
                                                abi_serializer::create_yield_function( abi_serializer_max_time )};
-		 fc::crypto::private_key txn_test_contract_priv_key = fc::crypto::private_key::regenerate(fc::sha256::hash("txt"));
+		 fc::crypto::private_key txn_test_receiver_C_priv_key = fc::crypto::private_key::regenerate(fc::sha256(std::string(64, 'c')));
 		 for(unsigned int i = 0; i < total_accounts; ++i) {
-			 //transfer EOS to test accounts
+			 //transfer LAT to test accounts
 		 	{
 			 	signed_transaction trx;
 				action act;
-				act.account = testContract;
+				act.account = newaccountT;
 				act.name = N(transfer);
-				act.authorization = vector<permission_level>{{testContract,config::active_name}};
+				act.authorization = vector<permission_level>{{newaccountT,config::active_name}};
 				act.data = eosio_token_serializer.variant_to_binary("transfer",
-                                   fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"20000000.0000 EOS\",\"memo\":\"\"}",
-                                   fc::mutable_variant_object()("from",testContract.to_string())("to",accounts[i].to_string()))),
+                                   fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"20000000.0000 LAT\",\"memo\":\"\"}",
+                                   fc::mutable_variant_object()("from",newaccountT.to_string())("to",accounts[i].to_string()))),
                                    abi_serializer::create_yield_function( abi_serializer_max_time ));
 				trx.actions.push_back(act);
 	            trx.expiration = cc.head_block_time() + fc::seconds(180);
 	            trx.set_reference_block(cc.head_block_id());
 	            trx.max_net_usage_words = 5000;
-	            trx.sign(txn_test_contract_priv_key, chainid);
+	            trx.sign(txn_test_receiver_C_priv_key, chainid);
 	            trxs.emplace_back(std::move(trx));
 		 	}
 		 }
@@ -432,11 +434,11 @@ struct txn_test_gen_plugin_impl {
 		 {
 		 //create the actions here
 	     action act_a_to_b;
-		 act_a_to_b.account = testContract;
+		 act_a_to_b.account = newaccountT;
 		 act_a_to_b.name = N(transfer);
 		 act_a_to_b.authorization = vector<permission_level>{{accounts[a_index],config::active_name}};
 		 act_a_to_b.data = eosio_token_serializer.variant_to_binary("transfer",
-						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"1.0000 EOS\",\"memo\":\"${l}\"}",
+						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"1.0000 LAT\",\"memo\":\"${l}\"}",
 						 fc::mutable_variant_object()("from",accounts[a_index].to_string())("to",accounts[b_index].to_string())("l", tx_salt))),
 						 abi_serializer::create_yield_function( abi_serializer_max_time ));
 		 
@@ -453,11 +455,11 @@ struct txn_test_gen_plugin_impl {
 
          {
 	     action act_b_to_a;
-		 act_b_to_a.account = testContract;
+		 act_b_to_a.account = newaccountT;
 		 act_b_to_a.name = N(transfer);
 		 act_b_to_a.authorization = vector<permission_level>{{accounts[b_index],config::active_name}};
 		 act_b_to_a.data = eosio_token_serializer.variant_to_binary("transfer",
-						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"1.0000 EOS\",\"memo\":\"${l}\"}",
+						 fc::json::from_string(fc::format_string("{\"from\":\"${from}\",\"to\":\"${to}\",\"quantity\":\"1.0000 LAT\",\"memo\":\"${l}\"}",
 						 fc::mutable_variant_object()("from",accounts[b_index].to_string())("to",accounts[a_index].to_string())("l", tx_salt))),
 						 abi_serializer::create_yield_function( abi_serializer_max_time ));
 		 
@@ -691,7 +693,7 @@ void txn_test_gen_plugin::plugin_initialize(const variables_map& options) {
                   "kvABI empty", ("my->kvABISerializer", my->kvABISerializer) );
       EOS_ASSERT( my->insertionSortABI.length() > 0, chain::plugin_config_exception,
                   "insertionSortABI empty", ("my->insertionSortABISerializer", my->insertionSortABISerializer) );
-      my->testContract = eosio::chain::name("txt");
+      my->newaccountT = eosio::chain::name("txt");
       EOS_ASSERT( my->thread_pool_size > 0, chain::plugin_config_exception,
                   "txn-test-gen-threads ${num} must be greater than 0", ("num", my->thread_pool_size) );
    } FC_LOG_AND_RETHROW()
@@ -699,6 +701,7 @@ void txn_test_gen_plugin::plugin_initialize(const variables_map& options) {
 
 void txn_test_gen_plugin::plugin_startup() {
    app().get_plugin<http_plugin>().add_api({
+      CALL_ASYNC(txn_test_gen, my, create_newAccountT, INVOKE_ASYNC_R_R(my, create_newAccountT, std::string, std::string), 200),
       CALL_ASYNC(txn_test_gen, my, create_test_accounts, INVOKE_ASYNC_R_R(my, create_test_accounts, std::string, std::string), 200),
       CALL_ASYNC(txn_test_gen, my, init_test_accounts, INVOKE_ASYNC_R_R(my, init_test_accounts, std::string, std::string), 200),
       CALL(txn_test_gen, my, stop_generation, INVOKE_V_V(my, stop_generation), 200),
